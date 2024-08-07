@@ -1,3 +1,5 @@
+// This file is the backend.
+
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -44,7 +46,7 @@ Keep interactions friendly, professional, and focused on delivering helpful assi
 // This means, multiple requests can be sent at the same time.
 
 export async function POST(req) {
-    const openai = new OpenAI()
+    const openai = new OpenAI({ apiKey: process.env.OPEN_API_KEY })
     // Extract the data from the request.
     const data = await req.json()
 
