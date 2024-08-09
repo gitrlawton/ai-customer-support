@@ -1,7 +1,7 @@
 // This file is the backend.
 
 import { NextResponse } from "next/server";
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import OpenAI from "openai";
 
 const systemPrompt = `
 You are an AI-powered customer support bot for Headstarter AI, a platform that provides AI-based interview questions to practice for software engineering interviews.
@@ -35,8 +35,6 @@ Your goal is to assist users by providing accurate information, answering questi
    - Record feedback for continuous improvement of the support service.
 
 Keep interactions friendly, professional, and focused on delivering helpful assistance to ensure a positive experience for Headstarter AI users.
-
-Important: Use no more than 200 words.
 `;
 
 // This backend is made up of 3 simple steps/parts:
@@ -48,53 +46,49 @@ Important: Use no more than 200 words.
 // This means, multiple requests can be sent at the same time.
 
 export async function POST(req) {
+    const openai = new OpenAI({ apiKey: process.env.OPEN_API_KEY })
+    // Extract the data from the request.
+    const data = await req.json()
 
-    const bedrockClient = new BedrockRuntimeClient(
-        { 
-            region: "us-west-2", 
-            credentials: {
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    const completion = await openai.chat.completions.create({
+        messages: [
+            {
+                role: "system",
+                content: systemPrompt,
+            },
+            // Spread operator to get the rest of our messages.
+            ...data,
+        ],
+        model: 'gpt-4o-mini',
+        stream: true,
+    })
+
+    const stream = new ReadableStream({
+        async start(controller) {
+            const encoder = new TextEncoder()
+
+            try {
+                for await (const chunk of completion) {
+                    // ? are used to make sure it exists before trying to chain.
+                    const content = chunk.choices[0]?.delta?.content
+
+                    if (content) {
+                        const text = encoder.encode(content)
+
+                        controller.enqueue(text)
+                    }
+                }
+            }
+            catch (error) {
+                controller.error(error)
+            }
+            finally {
+                // Close our controller.
+                controller.close()
             }
         }
-    );
-    // Extract the data from the request.
-    try {
-        const data = await req.json();
+    })
 
-        // Convert the system prompt to a user message
-        const messages = [
-            { role: "user", content: systemPrompt },
-            ...data.map(msg => ({
-                role: msg.role === "user" ? "user" : "assistant",
-                content: msg.content
-            }))
-        ];
-
-        const command = new InvokeModelCommand({
-            modelId: "anthropic.claude-3-haiku-20240307-v1:0",
-            contentType: "application/json",
-            accept: "application/json",
-            body: JSON.stringify({
-                anthropic_version: "bedrock-2023-05-31",
-                max_tokens: 300,
-                messages: messages,
-                temperature: 0.7,
-                top_k: 250,
-                top_p: 0.999,
-            })
-        });
-
-        const response = await bedrockClient.send(command);
-        const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-        return NextResponse.json(responseBody);
-    } 
-    catch (error) {
-        console.error("API route error:", error);
-        return new NextResponse(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+    // Send the stream.
+    return new NextResponse(stream)
 }
