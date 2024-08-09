@@ -1,7 +1,7 @@
 // This file is the backend.
 
 import { NextResponse } from "next/server";
-import { BedrockRuntimeClient, InvokeModelWithResponseStreamCommand } from "@aws-sdk/client-bedrock-runtime";
+import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 
 const systemPrompt = `
 You are an AI-powered customer support bot for Headstarter AI, a platform that provides AI-based interview questions to practice for software engineering interviews.
@@ -48,6 +48,7 @@ Important: Use no more than 200 words.
 // This means, multiple requests can be sent at the same time.
 
 export async function POST(req) {
+
     const bedrockClient = new BedrockRuntimeClient(
         { 
             region: "us-west-2", 
@@ -57,26 +58,27 @@ export async function POST(req) {
             }
         }
     );
-
+    // Extract the data from the request.
     try {
         const data = await req.json();
 
         // Convert the system prompt to a user message
         const messages = [
-            { role: "human", content: "System: " + systemPrompt },
+            { role: "user", content: systemPrompt },
             ...data.map(msg => ({
-                role: msg.role === "user" ? "human" : "assistant",
+                role: msg.role === "user" ? "user" : "assistant",
                 content: msg.content
             }))
         ];
 
-        const command = new InvokeModelWithResponseStreamCommand({
-            modelId: "anthropic.claude-v2",
+        const command = new InvokeModelCommand({
+            modelId: "anthropic.claude-3-haiku-20240307-v1:0",
             contentType: "application/json",
             accept: "application/json",
             body: JSON.stringify({
-                prompt: formatMessages(messages),
-                max_tokens_to_sample: 300,
+                anthropic_version: "bedrock-2023-05-31",
+                max_tokens: 300,
+                messages: messages,
                 temperature: 0.7,
                 top_k: 250,
                 top_p: 0.999,
@@ -84,67 +86,15 @@ export async function POST(req) {
         });
 
         const response = await bedrockClient.send(command);
+        const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
-        // Implement streaming
-        const stream = new ReadableStream({
-            async start(controller) {
-                const encoder = new TextEncoder();
-                const decoder = new TextDecoder();
-        
-                try {
-                    for await (const chunk of response.body) {
-                        try {
-                            let chunkContent;
-                            if (chunk && chunk.chunk && chunk.chunk.bytes) {
-                                // If the chunk has a nested structure with bytes
-                                chunkContent = decoder.decode(chunk.chunk.bytes);
-                            } else if (chunk instanceof Uint8Array) {
-                                // If the chunk is directly a Uint8Array
-                                chunkContent = decoder.decode(chunk);
-                            } else if (typeof chunk === 'string') {
-                                // If the chunk is already a string
-                                chunkContent = chunk;
-                            } else {
-                                console.log("Unexpected chunk format:", chunk);
-                                continue; // Skip this chunk
-                            }
-        
-                            const jsonChunk = JSON.parse(chunkContent);
-                            const content = jsonChunk.completion;
-        
-                            if (content) {
-                                const text = encoder.encode(content);
-                                controller.enqueue(text);
-                            }
-                        } catch (error) {
-                            console.error("Error processing individual chunk:", error);
-                            console.log("Problematic chunk:", chunk);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error in stream processing:", error);
-                    controller.error(error);
-                } finally {
-                    controller.close();
-                }
-            }
-        });
-
-        // Send the stream
-        return new NextResponse(stream);
-        
-    } catch (error) {
+        return NextResponse.json(responseBody);
+    } 
+    catch (error) {
         console.error("API route error:", error);
         return new NextResponse(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
     }
-}
-
-// Helper function to format the messages the way Claude v2 wants them
-function formatMessages(messages) {
-    return messages.map(msg => 
-        `${msg.role === 'human' ? 'Human' : 'Assistant'}: ${msg.content}`
-    ).join('\n\n') + '\n\nAssistant:';
 }

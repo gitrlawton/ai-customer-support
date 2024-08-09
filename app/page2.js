@@ -18,61 +18,43 @@ export default function Home() {
   // return the response.
   const sendMessage = async () => {
     setMessage('');
-    setMessages((messages) => [
-      ...messages,
+    setMessages((prevMessages) => [
+      ...prevMessages,
       {role: "user", content: message},
       {role: "assistant", content: ''}
-    ])
-
-    const response = fetch('/api/chat', {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      // We need to define a new array here because the state variables may
-      // not update in time to pick up what we added above with setMessages().
-      // Send a message with the role being user.
-      body: JSON.stringify([...messages, {role: "user", content: message}])
-    }).then(async (resp) => {
-    if (!resp.ok) {
-        throw new Error(`HTTP error! status: ${resp.status}`);
+    ]);
+  
+    try {
+      const response = await fetch('/api/chat', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify([...messages, {role: "user", content: message}])
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+  
+      setMessages((prevMessages) => {
+        const newMessages = [...prevMessages];
+        newMessages[newMessages.length - 1] = {
+          role: "assistant",
+          content: data.content[0].text
+        };
+        return newMessages;
+      });
+    } catch (error) {
+      console.error("There was a problem with the fetch operation:", error);
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {role: "system", content: `Error: ${error.message}. Please try again.`}
+      ]);
     }
-      const reader = resp.body.getReader()
-      // Decode the encoding we did in the backend.
-      const decoder = new TextDecoder()
-
-      let result = ""
-      return reader.read().then(function processText({done, value}) {
-        if (done) {
-          return result
-        }
-        // Otherwise, keep updating our state variable.
-        else {
-          // Decode the value if there's a value, otherwise, decode a new array
-          // which will end up being an empty string.
-          const text = decoder.decode(value || new Int8Array(), {stream: true})
-
-          setMessages((messages) => {
-            let lastMessage = messages[messages.length - 1]
-            let otherMessages = messages.slice(0, messages.length - 1)
-
-            return [
-              ...otherMessages,
-              {
-                ...lastMessage,
-                content: lastMessage.content + text,
-              },
-            ]
-          })
-
-          return reader.read().then(processText)
-
-        }
-      })
-    }).catch(error => {
-        console.error("Error in fetch:", error);
-  })
-}
+  };
 
   return (
     <Box 
