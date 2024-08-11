@@ -66,7 +66,7 @@ Your goal is to assist users by providing accurate information, answering questi
 
 Keep interactions friendly, professional, and focused on delivering helpful assistance to ensure a positive experience for Headstarter AI users.
 
-Important: Limit your responses to 200 words or less.
+Important: Use no more than 200 words.
 `;
 
 // This backend is made up of 3 simple steps/parts:
@@ -140,10 +140,7 @@ export async function POST(req) {
         });
 
         return new NextResponse(stream);
-
-    } 
-    
-    catch (error) {
+    } catch (error) {
         console.error("API route error:", error);
         return new NextResponse(JSON.stringify({ error: error.message }), {
             status: 500,

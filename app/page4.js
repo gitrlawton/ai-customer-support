@@ -2,7 +2,7 @@
 
 'use client' // Needed when using state.
 import {useState} from "react";
-import { Box, Stack, TextField, Button, Typography } from "@mui/material"
+import { Box, Stack, TextField, Button } from "@mui/material"
 
 export default function Home() {
   // All the messages.
@@ -115,13 +115,8 @@ export default function Home() {
                   borderRadius={16}
                   p={3}
                 >
-                    {/** Display the message. */}
-                    <Typography
-                        component="div"
-                        style={{ whiteSpace: 'pre-wrap' }}
-                    >
-                        {message.content}
-                    </Typography>
+                  {/** Display the message. */}
+                  {message.content}
                 </Box>
               </Box>
             ))
